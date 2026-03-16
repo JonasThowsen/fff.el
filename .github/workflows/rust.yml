@@ -1,0 +1,78 @@
+name: Rust CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+  # Ensure consistent macOS deployment target across all compiled objects
+  # (Rust, cc-compiled C code, and Zig-compiled zlob) to avoid linker warnings
+  MACOSX_DEPLOYMENT_TARGET: "13"
+
+jobs:
+  test:
+    name: Test
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      
+      # Zig is required to compile zlob
+      - name: Install Zig
+        uses: goto-bus-stop/setup-zig@v2
+        with:
+          version: 0.15.2
+
+      - name: Install Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          cache: true
+          cache-on-failure: true
+          cache-key: "v1-rust"
+          components: rustfmt, clippy
+
+      - name: Run tests
+        run: |
+          cargo test --verbose -p fff-core -p fff-query-parser -p fff-c --features zlob
+          cargo test --verbose -p grep-searcher
+
+  fmt:
+    name: cargo fmt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+          components: rustfmt
+      - name: Check formatting
+        run: cargo fmt -- --check
+
+  clippy:
+    name: cargo clippy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      # Zig is required to compile zlob
+      - name: Install Zig
+        uses: goto-bus-stop/setup-zig@v2
+        with:
+          version: 0.15.2
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+          components: clippy
+          
+      - name: Run clippy
+        run: |
+          cargo clippy -p fff-core -p fff-query-parser -p fff-nvim -p fff-c --features zlob -- -D warnings
+          cargo clippy -p grep-searcher -- -D warnings

@@ -1,0 +1,9 @@
+target/
+result
+.direnv/
+.devenv/
+*.data
+*.dylib
+*.so
+*.dll
+emacs/*.elc

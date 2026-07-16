@@ -79,19 +79,48 @@
 (define-ffi-function fff--ffi-grep-result-get-match
   "fff_grep_result_get_match" :pointer [:pointer :uint32] fff--library)
 
+(define-ffi-function fff--ffi-result-get-success
+  "fff_result_get_success" :bool [:pointer] fff--library)
+
+(define-ffi-function fff--ffi-result-get-error
+  "fff_result_get_error" :pointer [:pointer] fff--library)
+
+(define-ffi-function fff--ffi-result-get-handle
+  "fff_result_get_handle" :pointer [:pointer] fff--library)
+
+(define-ffi-function fff--ffi-search-result-get-count
+  "fff_search_result_get_count" :uint32 [:pointer] fff--library)
+
+(define-ffi-function fff--ffi-grep-result-get-count
+  "fff_grep_result_get_count" :uint32 [:pointer] fff--library)
+
+(define-ffi-function fff--ffi-file-item-get-relative-path
+  "fff_file_item_get_relative_path" :pointer [:pointer] fff--library)
+
+(define-ffi-function fff--ffi-grep-match-get-relative-path
+  "fff_grep_match_get_relative_path" :pointer [:pointer] fff--library)
+
+(define-ffi-function fff--ffi-grep-match-get-line-content
+  "fff_grep_match_get_line_content" :pointer [:pointer] fff--library)
+
+(define-ffi-function fff--ffi-grep-match-get-line-number
+  "fff_grep_match_get_line_number" :uint64 [:pointer] fff--library)
+
+(define-ffi-function fff--ffi-grep-match-get-col
+  "fff_grep_match_get_col" :uint32 [:pointer] fff--library)
+
 ;;; Result helpers
 
 (defun fff--result-ok-p (result-ptr)
-  (ffi-pointer-null-p
-   (ffi--mem-ref (ffi-pointer+ result-ptr 8) :pointer)))
+  (fff--ffi-result-get-success result-ptr))
 
 (defun fff--result-error (result-ptr)
-  (let ((err-ptr (ffi--mem-ref (ffi-pointer+ result-ptr 8) :pointer)))
+  (let ((err-ptr (fff--ffi-result-get-error result-ptr)))
     (unless (ffi-pointer-null-p err-ptr)
       (ffi-get-c-string err-ptr))))
 
 (defun fff--result-handle (result-ptr)
-  (ffi--mem-ref (ffi-pointer+ result-ptr 16) :pointer))
+  (fff--ffi-result-get-handle result-ptr))
 
 (defmacro fff--with-cstring (var string &rest body)
   (declare (indent 2))
@@ -111,39 +140,46 @@
              (error "fff: %s" (fff--result-error ,result-ptr)))
          (fff--ffi-free-result ,result-ptr)))))
 
-;;; Struct readers
+;;; Result readers
 
-(defun fff--string-at (ptr offset)
-  (let ((str-ptr (ffi--mem-ref (ffi-pointer+ ptr offset) :pointer)))
-    (unless (ffi-pointer-null-p str-ptr)
-      (ffi-get-c-string str-ptr))))
+(defvar fff--base-path nil)
+
+(defun fff--absolute-path (relative-path)
+  (when relative-path
+    (expand-file-name relative-path fff--base-path)))
 
 (defun fff--search-result-count (search-result-ptr)
-  (ffi--mem-ref (ffi-pointer+ search-result-ptr 16) :uint32))
+  (fff--ffi-search-result-get-count search-result-ptr))
 
 (defun fff--grep-result-count (grep-result-ptr)
-  (ffi--mem-ref (ffi-pointer+ grep-result-ptr 8) :uint32))
-
-(defun fff--file-item-path (item-ptr)
-  (fff--string-at item-ptr 0))
+  (fff--ffi-grep-result-get-count grep-result-ptr))
 
 (defun fff--file-item-relative-path (item-ptr)
-  (fff--string-at item-ptr 8))
+  (let ((path-ptr (fff--ffi-file-item-get-relative-path item-ptr)))
+    (unless (ffi-pointer-null-p path-ptr)
+      (ffi-get-c-string path-ptr))))
 
-(defun fff--grep-match-path (match-ptr)
-  (fff--string-at match-ptr 0))
+(defun fff--file-item-path (item-ptr)
+  (fff--absolute-path (fff--file-item-relative-path item-ptr)))
 
 (defun fff--grep-match-relative-path (match-ptr)
-  (fff--string-at match-ptr 8))
+  (let ((path-ptr (fff--ffi-grep-match-get-relative-path match-ptr)))
+    (unless (ffi-pointer-null-p path-ptr)
+      (ffi-get-c-string path-ptr))))
+
+(defun fff--grep-match-path (match-ptr)
+  (fff--absolute-path (fff--grep-match-relative-path match-ptr)))
 
 (defun fff--grep-match-line-content (match-ptr)
-  (fff--string-at match-ptr 32))
+  (let ((content-ptr (fff--ffi-grep-match-get-line-content match-ptr)))
+    (unless (ffi-pointer-null-p content-ptr)
+      (ffi-get-c-string content-ptr))))
 
 (defun fff--grep-match-line (match-ptr)
-  (ffi--mem-ref (ffi-pointer+ match-ptr 104) :uint64))
+  (fff--ffi-grep-match-get-line-number match-ptr))
 
 (defun fff--grep-match-col (match-ptr)
-  (ffi--mem-ref (ffi-pointer+ match-ptr 120) :uint32))
+  (fff--ffi-grep-match-get-col match-ptr))
 
 ;;; Customization
 
@@ -183,7 +219,6 @@
 ;;; State
 
 (defvar fff--instance nil)
-(defvar fff--base-path nil)
 (defvar fff--last-query "")
 
 (defun fff--project-root ()
